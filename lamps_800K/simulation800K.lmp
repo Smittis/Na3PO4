@@ -1,0 +1,48 @@
+# ----------------- INITIALIZATION -----------------
+units           metal
+dimension       3
+boundary        p p p
+atom_style      charge
+
+# ----------------- ATOM DEFINITION -----------------
+read_data       ../lamps_600K/data.na3po4_cubic
+
+# Masses: type 1=Na, 2=O, 3=P
+mass            1 22.98977
+mass            2 15.9994
+mass            3 30.97376
+
+# ----------------- MACE POTENTIAL -----------------
+pair_style      mliap unified ../lamps1/mace-omat-0-medium.model-mliap_lammps.pt
+pair_coeff      * * Na O P
+
+# ----------------- MINIMIZATION -----------------
+velocity        all set 0.0 0.0 0.0
+minimize        1.0e-4 1.0e-6 1000 10000
+reset_timestep  0
+
+# ----------------- NPT EQUILIBRATION (800 K) -----------------
+velocity        all create 800.0 42137 mom yes rot yes dist gaussian
+fix             1 all npt temp 800.0 800.0 0.2 iso 0.0 0.0 2.0
+thermo          500
+thermo_style    custom step temp etotal pe ke press vol lx ly lz
+dump            eq all custom 500 dump.equil_800K id type q x y z
+timestep        0.002
+run             25000           # 50 ps NPT equilibration
+unfix           1
+undump          eq
+reset_timestep  0
+
+# ----------------- NVT PRODUCTION (800 K) -----------------
+group           Na type 1
+
+compute         msd_Na Na msd com yes
+fix             msd_out Na ave/time 100 1 100 c_msd_Na[1] c_msd_Na[2] c_msd_Na[3] c_msd_Na[4] &
+                file msd_Na_800K.dat title1 "# step msd_x msd_y msd_z msd_total (Ang^2)"
+
+fix             2 all nvt temp 800.0 800.0 0.2
+thermo          500
+thermo_style    custom step temp etotal pe ke press vol
+dump            prod all custom 2000 dump.prod_800K id type q x y z
+timestep        0.002
+run             250000          # 500 ps NVT production
